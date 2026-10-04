@@ -1,0 +1,28 @@
+# Flutter / Dart
+**/build/
+**/.dart_tool/
+**/.packages
+**/pubspec.lock
+
+# Android
+**/android/.gradle/
+**/android/local.properties
+**/android/app/release/
+**/*.keystore
+**/android/key.properties
+
+# iOS
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+
+# Python venv
+backend/venv/
+**/__pycache__/
+*.pyc
+
+# DB & secrets
+backend/shiftly.db
+*.env
+.env
