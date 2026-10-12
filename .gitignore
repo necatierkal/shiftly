@@ -10,6 +10,8 @@
 **/android/app/release/
 **/*.keystore
 **/android/key.properties
+*.apk
+**/*.apk
 
 # iOS
 **/ios/Pods/
