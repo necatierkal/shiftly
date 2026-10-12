@@ -26,3 +26,8 @@ backend/venv/
 backend/shiftly.db
 *.env
 .env
+
+# Pytest & Tests
+**/.pytest_cache/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
