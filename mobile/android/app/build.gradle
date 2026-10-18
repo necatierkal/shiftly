@@ -1,0 +1,72 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
+if (!keystorePropertiesFile.exists()) {
+    keystorePropertiesFile = file('key.properties')
+}
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+android {
+    namespace "com.shiftly.app"
+    compileSdkVersion 36
+
+    defaultConfig {
+        applicationId "com.shiftly.app"
+        minSdkVersion flutter.minSdkVersion
+        targetSdkVersion 35
+        versionCode flutter.versionCode
+        versionName flutter.versionName
+        multiDexEnabled true
+    }
+
+    signingConfigs {
+        release {
+            def keyFile = file('shiftly-release-key.jks')
+            if (!keyFile.exists() && keystorePropertiesFile.exists() && keystoreProperties['storeFile']) {
+                keyFile = rootProject.file(keystoreProperties['storeFile'])
+            }
+            if (keyFile.exists()) {
+                keyAlias keystoreProperties['keyAlias'] ?: 'shiftly'
+                keyPassword keystoreProperties['keyPassword'] ?: '300516'
+                storeFile keyFile
+                storePassword keystoreProperties['storePassword'] ?: '300516'
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            def keyFile = file('shiftly-release-key.jks')
+            if (keyFile.exists()) {
+                signingConfig signingConfigs.release
+            } else {
+                signingConfig signingConfigs.debug
+            }
+            minifyEnabled false
+            shrinkResources false
+        }
+        debug {
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+flutter {
+    source '../..'
+}

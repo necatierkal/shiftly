@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3157D5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1E3BB0;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#19B394;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#10B981;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded squircle -->
+  <rect x="32" y="32" width="448" height="448" rx="112" fill="url(#grad1)" />
+
+  <!-- Calendar base (white sheet with rounded corners) -->
+  <rect x="116" y="130" width="280" height="260" rx="36" fill="#FFFFFF" opacity="0.96" />
+
+  <!-- Calendar Header Strip -->
+  <path d="M 116 166 C 116 146.1 132.1 130 152 130 L 360 130 C 379.9 130 396 146.1 396 166 L 396 195 L 116 195 Z" fill="#1E3BB0" />
+
+  <!-- Calendar Ring Binder Pins -->
+  <rect x="180" y="105" width="22" height="48" rx="11" fill="#FFFFFF" stroke="#3157D5" stroke-width="4" />
+  <rect x="310" y="105" width="22" height="48" rx="11" fill="#FFFFFF" stroke="#3157D5" stroke-width="4" />
+
+  <!-- Stylized Shift Cycle Circle & Clock Hands in Center -->
+  <circle cx="256" cy="295" r="68" fill="none" stroke="#F1F5F9" stroke-width="16" />
+  
+  <!-- Shift Cycle Arc (Accent Secondary Teal) -->
+  <path d="M 256 227 A 68 68 0 1 1 200 256" fill="none" stroke="url(#grad2)" stroke-width="16" stroke-linecap="round" />
+
+  <!-- Cycle Arrow Head -->
+  <polygon points="186,242 206,270 216,240" fill="#19B394" />
+
+  <!-- Center Clock Core -->
+  <circle cx="256" cy="295" r="9" fill="#3157D5" />
+
+  <!-- Clock Hands -->
+  <line x1="256" y1="295" x2="256" y2="252" stroke="#3157D5" stroke-width="10" stroke-linecap="round" />
+  <line x1="256" y1="295" x2="290" y2="295" stroke="#F59E0B" stroke-width="8" stroke-linecap="round" />
+</svg>
