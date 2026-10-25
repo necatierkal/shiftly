@@ -177,6 +177,31 @@ class ProfileScreen extends StatelessWidget {
                 onTap: () {},
               ),
               _buildSettingsTile(
+                icon: Icons.sync_alt_rounded,
+                title: 'Rolü Değiştir (Yönetici / Personel)',
+                subtitle: auth.isManager ? 'Şu an: Yönetici (Personel moduna geç)' : 'Şu an: Personel (Yönetici moduna geç)',
+                onTap: () async {
+                  if (auth.isManager) {
+                    await auth.loginAsStaff();
+                  } else {
+                    await auth.loginAsManager();
+                  }
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Aktif rol değiştirildi: ${auth.isManager ? 'Yönetici' : 'Personel'}'),
+                      ),
+                    );
+                  }
+                },
+              ),
+              _buildSettingsTile(
+                icon: Icons.settings_ethernet_rounded,
+                title: 'Sunucu Bağlantı Adresi (API URL)',
+                subtitle: 'Yerel ağ / IP adresi yapılandırması',
+                onTap: () => _showServerSettings(context, auth),
+              ),
+              _buildSettingsTile(
                 icon: Icons.calendar_month_outlined,
                 title: 'Hafta Başlangıç Günü',
                 subtitle: 'Pazartesi',
@@ -311,6 +336,54 @@ class ProfileScreen extends StatelessWidget {
         subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
         trailing: const Icon(Icons.chevron_right_rounded, size: 20),
         onTap: onTap,
+      ),
+    );
+  }
+
+  void _showServerSettings(BuildContext context, AuthProvider auth) {
+    final urlController = TextEditingController(
+      text: 'http://10.0.2.2:8000/api/v1',
+    );
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sunucu Bağlantı Adresi'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Fiziksel telefonda çalıştırırken bilgisayarınızın yerel IP adresini giriniz (Örn: http://192.168.1.35:8000/api/v1):',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: urlController,
+              decoration: const InputDecoration(
+                labelText: 'API Base URL',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              auth.setCustomServerUrl(urlController.text.trim());
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Sunucu adresi güncellendi: ${urlController.text.trim()}'),
+                ),
+              );
+            },
+            child: const Text('Kaydet'),
+          ),
+        ],
       ),
     );
   }

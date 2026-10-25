@@ -161,6 +161,17 @@ def reject_swap(
     swap = db.query(ShiftSwap).filter(ShiftSwap.id == swap_id).first()
     if not swap:
         raise HTTPException(status_code=404, detail="Takas talebi bulunamadı.")
+    
+    # Verify permission: only target user, requester, or team manager can reject
+    is_target = swap.target_user_id is not None and swap.target_user_id == current_user.id
+    is_requester = swap.requester_id == current_user.id
+    is_admin = current_user.role == "admin"
+    if not (is_target or is_requester or is_admin):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bu takas talebini reddetme yetkiniz bulunmuyor.",
+        )
+
     swap.status = "REJECTED"
     db.commit()
     return APIResponse(success=True, message="Takas talebi reddedildi.")

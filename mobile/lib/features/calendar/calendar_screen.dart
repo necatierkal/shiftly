@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/providers/auth_provider.dart';
 import '../../core/providers/shift_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/app_widgets.dart';
 import '../shifts/create_shift_dialog.dart';
 import '../shifts/auto_pattern_dialog.dart';
+import '../plans/plan_management_sheet.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -16,8 +18,17 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
-  DateTime _focusedMonth = DateTime(2026, 10, 1);
-  DateTime _selectedDay = DateTime(2026, 10, 3);
+  late DateTime _focusedMonth;
+  late DateTime _selectedDay;
+  bool _isExporting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _focusedMonth = DateTime(now.year, now.month, 1);
+    _selectedDay = DateTime(now.year, now.month, now.day);
+  }
 
   void _previousMonth() {
     setState(() {
@@ -31,15 +42,83 @@ class _CalendarScreenState extends State<CalendarScreen> {
     });
   }
 
+  Future<void> _exportPlan(String type) async {
+    final shiftProv = context.read<ShiftProvider>();
+    final plan = shiftProv.currentPlan;
+    if (plan == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Dışa aktarmak için aktif bir nöbet planı bulunamadı.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isExporting = true);
+    final bytes = type == 'excel'
+        ? await shiftProv.exportPlanExcel(plan.id)
+        : await shiftProv.exportPlanPdf(plan.id);
+    setState(() => _isExporting = false);
+
+    if (mounted) {
+      if (bytes != null && bytes.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.secondary,
+            content: Text(
+              type == 'excel'
+                  ? 'Excel (.xlsx) tablosu hazırlandı (${bytes.lengthInBytes} bayt)'
+                  : 'PDF (.pdf) nöbet listesi hazırlandı (${bytes.lengthInBytes} bayt)',
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.error,
+            content: Text('$type dışa aktarılamadı.'),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
     final shiftProv = context.watch<ShiftProvider>();
+    final isManager = auth.isManager;
     final dayShifts = shiftProv.getShiftsForDate(_selectedDay);
+    final lastSync = shiftProv.lastSyncTime;
+    final activePeriod = shiftProv.activePeriod;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Nöbet & Vardiya Takvimi'),
         actions: [
+          if (isManager && activePeriod != null) ...[
+            IconButton(
+              icon: const Icon(Icons.table_chart_outlined),
+              tooltip: 'Excel Çizelgesi',
+              onPressed: _isExporting ? null : () => _exportPlan('excel'),
+            ),
+            IconButton(
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              tooltip: 'PDF Nöbet Listesi',
+              onPressed: _isExporting ? null : () => _exportPlan('pdf'),
+            ),
+            IconButton(
+              icon: const Icon(Icons.auto_awesome_rounded),
+              tooltip: 'Nöbet Taslak Yönetimi',
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  builder: (_) => PlanManagementSheet(period: activePeriod),
+                );
+              },
+            ),
+          ],
           IconButton(
             icon: const Icon(Icons.autorenew_rounded),
             tooltip: 'Otomatik Döngü Uygula',
@@ -67,7 +146,54 @@ class _CalendarScreenState extends State<CalendarScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Month Header Selector (e.g., EKİM 2026)
+            // Sync status strip
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              color: Colors.grey.shade100,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.cloud_done_outlined,
+                    size: 13,
+                    color: Colors.grey.shade600,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    lastSync != null
+                        ? 'Son eşitleme: ${DateFormat('dd.MM.yyyy HH:mm').format(lastSync)}'
+                        : 'Çevrimdışı Mod — Yerel Veriler Gösteriliyor',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade700,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (isManager)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'Yönetici Modu',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // Month Header Selector
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               child: Row(
@@ -128,7 +254,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ),
             const SizedBox(height: 8),
 
-            // Calendar Grid View (Clean Material 3 Month Grid)
+            // Calendar Grid View
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: _buildMonthGrid(shiftProv),
@@ -166,7 +292,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     child: const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       child: Text(
-                        '+ Vardiya Ekle',
+                        '+ Nöbet Ekle',
                         style: TextStyle(
                           color: AppColors.primary,
                           fontWeight: FontWeight.w700,
@@ -194,7 +320,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           ),
                           const SizedBox(height: 8),
                           const Text(
-                            'Bu tarihte planlanmış vardiya yok.',
+                            'Bu tarihte planlanmış nöbet yok.',
                             style: TextStyle(
                               fontSize: 14,
                               color: AppColors.textSecondaryLight,
@@ -203,7 +329,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           const SizedBox(height: 12),
                           TextButton.icon(
                             icon: const Icon(Icons.add_rounded, size: 18),
-                            label: const Text('Vardiya veya İzin Ekle'),
+                            label: const Text('Nöbet veya İzin Ekle'),
                             onPressed: () {
                               showModalBottomSheet(
                                 context: context,
@@ -249,7 +375,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
       0,
     ).day;
 
-    // Monday is 1, Sunday is 7. Offset = firstDayOfMonth.weekday - 1
     final offset = firstDayOfMonth.weekday - 1;
     final totalCells = ((offset + daysInMonth) / 7).ceil() * 7;
 

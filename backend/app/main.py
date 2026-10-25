@@ -7,7 +7,19 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import settings
 from app.db.init_db import init_db
-from app.api.v1 import auth, shifts, shift_types, patterns, teams, swaps, statistics, admin
+from app.api.v1 import (
+    auth,
+    shifts,
+    shift_types,
+    patterns,
+    teams,
+    swaps,
+    statistics,
+    admin,
+    periods,
+    excuses,
+    plans,
+)
 
 
 @asynccontextmanager
@@ -93,3 +105,6 @@ app.include_router(teams.router, prefix=api_v1)
 app.include_router(swaps.router, prefix=api_v1)
 app.include_router(statistics.router, prefix=api_v1)
 app.include_router(admin.router, prefix=api_v1)
+app.include_router(periods.router, prefix=api_v1)
+app.include_router(excuses.router, prefix=api_v1)
+app.include_router(plans.router, prefix=api_v1)

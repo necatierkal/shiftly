@@ -17,9 +17,19 @@ class ApiException implements Exception {
 
 class ApiService {
   final LocalStorageService _storage;
-  late final String baseUrl;
+  late String baseUrl;
 
   ApiService(this._storage) {
+    _initBaseUrl();
+  }
+
+  void _initBaseUrl() {
+    final custom = _storage.getCustomApiUrl();
+    if (custom != null && custom.isNotEmpty) {
+      baseUrl = custom;
+      return;
+    }
+
     if (kIsWeb) {
       baseUrl = AppConfig.defaultApiBaseUrl;
     } else {
@@ -33,6 +43,11 @@ class ApiService {
         baseUrl = AppConfig.defaultApiBaseUrl;
       }
     }
+  }
+
+  void setBaseUrl(String newUrl) {
+    baseUrl = newUrl;
+    _storage.setCustomApiUrl(newUrl);
   }
 
   Map<String, String> _headers({bool needsAuth = true}) {
@@ -49,20 +64,62 @@ class ApiService {
     return headers;
   }
 
-  Future<dynamic> get(String endpoint, {Map<String, String>? queryParams, bool needsAuth = true}) async {
+  Future<dynamic> get(
+    String endpoint, {
+    Map<String, String>? queryParams,
+    bool needsAuth = true,
+  }) async {
     try {
       var uri = Uri.parse('$baseUrl$endpoint');
-      if (queryParams != null) {
+      if (queryParams != null && queryParams.isNotEmpty) {
         uri = uri.replace(queryParameters: queryParams);
       }
-      final response = await http.get(uri, headers: _headers(needsAuth: needsAuth)).timeout(const Duration(seconds: 10));
+      final response = await http
+          .get(uri, headers: _headers(needsAuth: needsAuth))
+          .timeout(const Duration(seconds: 10));
       return _handleResponse(response);
     } catch (e) {
       _handleNetworkError(e);
     }
   }
 
-  Future<dynamic> post(String endpoint, {Map<String, dynamic>? body, bool needsAuth = true}) async {
+  Future<Uint8List> getBytes(
+    String endpoint, {
+    Map<String, String>? queryParams,
+    bool needsAuth = true,
+  }) async {
+    try {
+      var uri = Uri.parse('$baseUrl$endpoint');
+      if (queryParams != null && queryParams.isNotEmpty) {
+        uri = uri.replace(queryParameters: queryParams);
+      }
+      final headers = <String, String>{};
+      if (needsAuth) {
+        final token = _storage.getAccessToken();
+        if (token != null) {
+          headers['Authorization'] = 'Bearer $token';
+        }
+      }
+      final response = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return response.bodyBytes;
+      }
+      throw ApiException(
+        'Dosya indirilemedi (Kod: ${response.statusCode})',
+        code: 'DOWNLOAD_FAILED',
+      );
+    } catch (e) {
+      _handleNetworkError(e);
+    }
+  }
+
+  Future<dynamic> post(
+    String endpoint, {
+    Map<String, dynamic>? body,
+    bool needsAuth = true,
+  }) async {
     try {
       final uri = Uri.parse('$baseUrl$endpoint');
       final response = await http
@@ -78,7 +135,11 @@ class ApiService {
     }
   }
 
-  Future<dynamic> put(String endpoint, {Map<String, dynamic>? body, bool needsAuth = true}) async {
+  Future<dynamic> put(
+    String endpoint, {
+    Map<String, dynamic>? body,
+    bool needsAuth = true,
+  }) async {
     try {
       final uri = Uri.parse('$baseUrl$endpoint');
       final response = await http
@@ -97,7 +158,9 @@ class ApiService {
   Future<dynamic> delete(String endpoint, {bool needsAuth = true}) async {
     try {
       final uri = Uri.parse('$baseUrl$endpoint');
-      final response = await http.delete(uri, headers: _headers(needsAuth: needsAuth)).timeout(const Duration(seconds: 10));
+      final response = await http
+          .delete(uri, headers: _headers(needsAuth: needsAuth))
+          .timeout(const Duration(seconds: 10));
       return _handleResponse(response);
     } catch (e) {
       _handleNetworkError(e);
@@ -129,7 +192,15 @@ class ApiService {
     }
 
     if (response.statusCode == 401) {
-      throw ApiException('Oturum süreniz doldu. Lütfen tekrar giriş yapın.', code: 'UNAUTHORIZED');
+      throw ApiException(
+        'Oturum süreniz doldu. Lütfen tekrar giriş yapın.',
+        code: 'UNAUTHORIZED',
+      );
+    } else if (response.statusCode == 403) {
+      throw ApiException(
+        msg.isNotEmpty ? msg : 'Bu işlem için yetkiniz bulunmamaktadır.',
+        code: 'FORBIDDEN',
+      );
     } else if (response.statusCode == 409) {
       throw ApiException(msg, code: 'CONFLICT');
     }
@@ -141,7 +212,9 @@ class ApiService {
     if (error is ApiException) {
       throw error;
     }
-    // Spec rule: Don't show technical exceptions to users
-    throw ApiException('Bağlantı kurulamadı. Lütfen internetinizi kontrol edin.', code: 'NETWORK_ERROR');
+    throw ApiException(
+      'Bağlantı kurulamadı. Lütfen sunucu ayarlarını veya internetinizi kontrol edin.',
+      code: 'NETWORK_ERROR',
+    );
   }
 }

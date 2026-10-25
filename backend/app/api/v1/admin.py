@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.models import User, Shift, Team, ShiftSwap
 from app.schemas.schemas import APIResponse
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_current_admin
 
 router = APIRouter(prefix="/admin", tags=["Admin (Internal)"])
 
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/admin", tags=["Admin (Internal)"])
 @router.get("/metrics", response_model=APIResponse[dict])
 def get_admin_metrics(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin),
 ):
     user_count = db.query(User).count()
     active_user_count = db.query(User).filter(User.is_active == True).count()

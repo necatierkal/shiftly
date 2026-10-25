@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/shift_provider.dart';
 import '../../core/theme/app_colors.dart';
@@ -31,6 +32,7 @@ class _AuthScreenState extends State<AuthScreen>
   final _regEmailController = TextEditingController();
   final _regPasswordController = TextEditingController();
   String _selectedSector = 'Sağlık';
+  String _selectedRole = 'staff';
 
   final List<String> _sectors = [
     'Sağlık',
@@ -62,7 +64,8 @@ class _AuthScreenState extends State<AuthScreen>
   }
 
   void _onSuccess() {
-    // Refresh shifts and redirect
+    context.read<ShiftProvider>().fetchPeriods();
+    context.read<ShiftProvider>().fetchExcuses();
     context.read<ShiftProvider>().fetchShifts();
     context.read<ShiftProvider>().fetchShiftTypes();
     context.read<ShiftProvider>().fetchStatistics();
@@ -100,6 +103,7 @@ class _AuthScreenState extends State<AuthScreen>
       firstName: _regFirstNameController.text,
       lastName: _regLastNameController.text,
       sector: _selectedSector,
+      role: _selectedRole,
     );
     if (success && mounted) {
       _onSuccess();
@@ -113,19 +117,70 @@ class _AuthScreenState extends State<AuthScreen>
     }
   }
 
-  Future<void> _handleDemoLogin() async {
+  Future<void> _handleManagerLogin() async {
     final auth = context.read<AuthProvider>();
-    final success = await auth.loginAsDemo();
+    final success = await auth.loginAsManager();
     if (success && mounted) {
       _onSuccess();
-    } else if (mounted && auth.errorMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(auth.errorMessage!),
-          backgroundColor: AppColors.error,
-        ),
-      );
     }
+  }
+
+  Future<void> _handleStaffLogin() async {
+    final auth = context.read<AuthProvider>();
+    final success = await auth.loginAsStaff();
+    if (success && mounted) {
+      _onSuccess();
+    }
+  }
+
+  void _showServerSettingsDialog() {
+    final urlController = TextEditingController(
+      text: AppConfig.defaultApiBaseUrl,
+    );
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sunucu Bağlantı Ayarı'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Gerçek telefonda yerel backend testi yapıyorsanız bilgisayarınızın yerel IP adresini giriniz (Örn: http://192.168.1.35:8000/api/v1):',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: urlController,
+              decoration: const InputDecoration(
+                labelText: 'API Base URL',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.read<AuthProvider>().setCustomServerUrl(
+                    urlController.text.trim(),
+                  );
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Sunucu adresi güncellendi: ${urlController.text.trim()}'),
+                ),
+              );
+            },
+            child: const Text('Kaydet'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -133,19 +188,29 @@ class _AuthScreenState extends State<AuthScreen>
     final auth = context.watch<AuthProvider>();
 
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_ethernet_rounded),
+            tooltip: 'Sunucu Ayarları (IP)',
+            onPressed: _showServerSettingsDialog,
+          ),
+        ],
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 16),
-              const Center(child: ShiftlyLogo(size: 80, showText: true)),
-              const SizedBox(height: 28),
+              const Center(child: ShiftlyLogo(size: 72, showText: true)),
+              const SizedBox(height: 20),
 
-              // Demo mode banner button (Madde 40)
+              // Role Quick Login Card
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(16),
@@ -156,7 +221,7 @@ class _AuthScreenState extends State<AuthScreen>
                 child: Column(
                   children: [
                     const Text(
-                      'Hızlı Test & Önizleme',
+                      'Hızlı Rol Girişi (Test & Demo)',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 13,
@@ -165,23 +230,51 @@ class _AuthScreenState extends State<AuthScreen>
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      'Hazır 24/48 nöbet takvimi ve sağlık personeli demo verileri ile anında başlayın.',
+                      'Farklı yetkileri hemen test etmek için rol seçiniz:',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondaryLight,
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    AppButton(
-                      text: 'Demo Hesabı ile Devam Et',
-                      isLoading: auth.isLoading,
-                      onPressed: _handleDemoLogin,
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                            ),
+                            icon: const Icon(Icons.admin_panel_settings, size: 16),
+                            label: const Text(
+                              'Yönetici',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            onPressed: auth.isLoading ? null : _handleManagerLogin,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.secondary,
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                            ),
+                            icon: const Icon(Icons.person, size: 16),
+                            label: const Text(
+                              'Personel',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            onPressed: auth.isLoading ? null : _handleStaffLogin,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
               // Tabs
               Container(
@@ -204,11 +297,11 @@ class _AuthScreenState extends State<AuthScreen>
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
               // Tab contents
               SizedBox(
-                height: 380,
+                height: 420,
                 child: TabBarView(
                   controller: _tabController,
                   children: [_buildLoginForm(auth), _buildRegisterForm(auth)],
@@ -311,15 +404,35 @@ class _AuthScreenState extends State<AuthScreen>
                 (v == null || v.length < 4) ? 'En az 4 karakter girin' : null,
           ),
           const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _selectedSector,
-            decoration: const InputDecoration(labelText: 'Sektörünüz'),
-            items: _sectors
-                .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                .toList(),
-            onChanged: (v) {
-              if (v != null) setState(() => _selectedSector = v);
-            },
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _selectedSector,
+                  decoration: const InputDecoration(labelText: 'Sektör'),
+                  items: _sectors
+                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setState(() => _selectedSector = v);
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _selectedRole,
+                  decoration: const InputDecoration(labelText: 'Rol'),
+                  items: const [
+                    DropdownMenuItem(value: 'staff', child: Text('Personel')),
+                    DropdownMenuItem(value: 'manager', child: Text('Yönetici')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) setState(() => _selectedRole = v);
+                  },
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 20),
           AppButton(

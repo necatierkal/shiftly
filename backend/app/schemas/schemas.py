@@ -30,6 +30,7 @@ class UserBase(BaseModel):
     email: EmailStr
     first_name: str
     last_name: str
+    role: Optional[str] = "staff"
     sector: Optional[str] = "Diğer"
     job_title: Optional[str] = None
     phone: Optional[str] = None
@@ -70,6 +71,7 @@ class UserSettingsSchema(BaseModel):
 class UserResponse(UserBase):
     id: int
     uuid: str
+    role: str = "staff"
     avatar_url: Optional[str] = None
     is_active: bool
     created_at: datetime
@@ -252,3 +254,141 @@ class StatisticsResponse(BaseModel):
     night_shift_count: int
     weekend_shifts_count: int
     distribution: Dict[str, Any]
+
+
+# Duty Period Schemas
+class DutyPeriodBase(BaseModel):
+    name: str
+    start_date: date
+    end_date: date
+    excuse_start_time: datetime
+    excuse_deadline: datetime
+    manager_note: Optional[str] = None
+
+
+class DutyPeriodCreate(DutyPeriodBase):
+    team_id: int
+
+
+class DutyPeriodUpdate(BaseModel):
+    name: Optional[str] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    excuse_start_time: Optional[datetime] = None
+    excuse_deadline: Optional[datetime] = None
+    status: Optional[str] = None
+    manager_note: Optional[str] = None
+
+
+class DutyPeriodResponse(DutyPeriodBase):
+    id: int
+    team_id: int
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    excuses_count: Optional[int] = 0
+    pending_excuses_count: Optional[int] = 0
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Duty Excuse Schemas
+class DutyExcuseBase(BaseModel):
+    start_date: date
+    end_date: date
+    is_all_day: bool = True
+    start_time: Optional[str] = None  # HH:MM
+    end_time: Optional[str] = None    # HH:MM
+    category: str = "personal"
+    description: str
+    is_hard_constraint: bool = True
+
+
+class DutyExcuseCreate(DutyExcuseBase):
+    period_id: int
+
+
+class DutyExcuseReview(BaseModel):
+    status: str  # APPROVED, REJECTED, INFO_REQUESTED
+    manager_comment: Optional[str] = None
+    is_hard_constraint: Optional[bool] = None
+
+
+class DutyExcuseResponse(DutyExcuseBase):
+    id: int
+    period_id: int
+    user_id: int
+    status: str
+    manager_comment: Optional[str] = None
+    reviewed_by: Optional[int] = None
+    reviewed_at: Optional[datetime] = None
+    created_at: datetime
+    user: Optional[UserResponse] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Duty Plan & Shifts Schemas
+class DutyPlanShiftBase(BaseModel):
+    shift_type_id: int
+    assigned_user_id: Optional[int] = None
+    date: date
+    start_datetime: datetime
+    end_datetime: datetime
+    note: Optional[str] = None
+    location: Optional[str] = None
+    is_unassigned: bool = False
+    unassigned_reason: Optional[str] = None
+    violation_warning: Optional[str] = None
+
+
+class DutyPlanShiftUpdate(BaseModel):
+    assigned_user_id: Optional[int] = None
+    note: Optional[str] = None
+    location: Optional[str] = None
+    override_reason: Optional[str] = None
+
+
+class DutyPlanShiftResponse(DutyPlanShiftBase):
+    id: int
+    plan_id: int
+    shift_type: Optional[ShiftTypeResponse] = None
+    assigned_user: Optional[UserResponse] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DutyPlanBase(BaseModel):
+    period_id: int
+    team_id: int
+    version: int = 1
+    status: str = "DRAFT"
+    change_note: Optional[str] = None
+    rules_config: Optional[Dict[str, Any]] = None
+
+
+class DutyPlanResponse(DutyPlanBase):
+    id: int
+    published_at: Optional[datetime] = None
+    published_by: Optional[int] = None
+    created_at: datetime
+    shifts: List[DutyPlanShiftResponse] = []
+    unassigned_shifts_count: Optional[int] = 0
+    publisher: Optional[UserResponse] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PlanGenerateRequest(BaseModel):
+    team_id: int
+    period_id: int
+    shift_type_ids: Optional[List[int]] = None
+    min_rest_hours: Optional[int] = 11
+    max_shifts_per_person: Optional[int] = None
+    fair_night_distribution: Optional[bool] = True
+    fair_weekend_distribution: Optional[bool] = True
+
+
+class PlanPublishRequest(BaseModel):
+    change_note: Optional[str] = None
+

@@ -9,6 +9,9 @@ import '../../core/theme/app_colors.dart';
 import '../../widgets/app_widgets.dart';
 import '../shifts/create_shift_dialog.dart';
 import '../shifts/auto_pattern_dialog.dart';
+import '../excuses/submit_excuse_dialog.dart';
+import '../excuses/excuse_management_sheet.dart';
+import '../plans/plan_management_sheet.dart';
 
 class DashboardScreen extends StatelessWidget {
   final Function(int)? onNavigateTab;
@@ -20,11 +23,14 @@ class DashboardScreen extends StatelessWidget {
     final auth = context.watch<AuthProvider>();
     final shiftProv = context.watch<ShiftProvider>();
     final user = auth.currentUser;
+    final isManager = auth.isManager;
     final now = DateTime.now();
 
     final todayShift = shiftProv.todayShift;
     final nextShift = shiftProv.nextShift;
     final weekShifts = shiftProv.thisWeekShifts;
+    final activePeriod = shiftProv.activePeriod;
+    final lastSync = shiftProv.lastSyncTime;
 
     double weekHours = 0;
     for (var s in weekShifts) {
@@ -37,6 +43,8 @@ class DashboardScreen extends StatelessWidget {
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
+            await shiftProv.fetchPeriods();
+            await shiftProv.fetchExcuses();
             await shiftProv.fetchShifts();
             await shiftProv.fetchStatistics();
           },
@@ -46,31 +54,65 @@ class DashboardScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1. Top Header: "Merhaba, Necati 👋"
+                // 1. Top Header: "Merhaba, [İsim] 👋" + Rol Etiketi
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Merhaba, ${user?.firstName ?? 'Çalışan'} 👋',
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.5,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  'Merhaba, ${user?.firstName ?? 'Kullanıcı'} 👋',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isManager
+                                      ? AppColors.primary.withValues(alpha: 0.15)
+                                      : AppColors.secondary.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  isManager ? 'YÖNETİCİ' : 'PERSONEL',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: isManager
+                                        ? AppColors.primary
+                                        : AppColors.secondary,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Bugün ${DateFormat('d MMMM, EEEE', 'tr_TR').format(now)}',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Theme.of(context).colorScheme.onSurface
-                                .withValues(alpha: 0.6),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Bugün ${DateFormat('d MMMM, EEEE', 'tr_TR').format(now)}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurface
+                                  .withValues(alpha: 0.6),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                     IconButton(
                       icon: Container(
@@ -92,9 +134,299 @@ class DashboardScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
 
-                // 2. Large Featured Card: "BUGÜNKÜ VARDİYAN"
+                // 2. Offline Sync Banner
+                const SizedBox(height: 12),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.cloud_done_rounded,
+                        size: 14,
+                        color: Colors.grey.shade700,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        lastSync != null
+                            ? 'Son eşitleme: ${DateFormat('dd.MM.yyyy HH:mm').format(lastSync)}'
+                            : 'Çevrimdışı Mod (Veriler Yerel Saklandı)',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // ==========================================
+                // YÖNETİCİ KONTROL KARTI (Manager View)
+                // ==========================================
+                if (isManager) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF3157D5), Color(0xFF1E3A8A)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF3157D5).withValues(alpha: 0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(
+                                  Icons.admin_panel_settings,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  'YÖNETİCİ KONTROL PANELİ',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (activePeriod != null)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  activePeriod.isAcceptingExcuses
+                                      ? 'Mazeret Açık'
+                                      : 'Mazeret Kapalı',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          activePeriod?.name ?? 'Planlama Dönemi',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${shiftProv.pendingExcusesCount} personel mazereti incelenmeyi bekliyor',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: AppColors.primary,
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 10),
+                                  elevation: 0,
+                                ),
+                                icon: const Icon(
+                                  Icons.rule_folder_rounded,
+                                  size: 16,
+                                ),
+                                label: Text(
+                                  'Mazeretler (${shiftProv.pendingExcusesCount})',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                onPressed: () {
+                                  showModalBottomSheet(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    builder: (_) =>
+                                        const ExcuseManagementSheet(),
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.secondary,
+                                  foregroundColor: Colors.white,
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 10),
+                                  elevation: 0,
+                                ),
+                                icon: const Icon(Icons.auto_awesome, size: 16),
+                                label: const Text(
+                                  'Taslak & Plan',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                onPressed: () {
+                                  if (activePeriod != null) {
+                                    showModalBottomSheet(
+                                      context: context,
+                                      isScrollControlled: true,
+                                      builder: (_) => PlanManagementSheet(
+                                        period: activePeriod,
+                                      ),
+                                    );
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                ] else ...[
+                  // ==========================================
+                  // PERSONEL MAZERET ÇAĞRISI (Staff View)
+                  // ==========================================
+                  if (activePeriod != null &&
+                      activePeriod.isAcceptingExcuses) ...[
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: AppColors.primary.withValues(alpha: 0.25),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.campaign_rounded,
+                                color: AppColors.primary,
+                                size: 22,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '${activePeriod.name} Mazeret Toplama Açık',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primary,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            activePeriod.excuseSubmissionDeadline != null
+                                ? 'Nöbet planı oluşturulmadan önce lütfen mazeretlerinizi iletiniz. Son Bildirim: ${DateFormat('dd.MM.yyyy HH:mm').format(activePeriod.excuseSubmissionDeadline!)}'
+                                : 'Nöbet planı oluşturulmadan önce uygun olmadığınız tarihleri bildiriniz.',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                icon: const Icon(
+                                  Icons.event_busy_rounded,
+                                  size: 16,
+                                ),
+                                label: const Text('Mazeret Bildir'),
+                                onPressed: () {
+                                  showModalBottomSheet(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    builder: (_) => SubmitExcuseSheet(
+                                      period: activePeriod,
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                icon: const Icon(
+                                  Icons.history_rounded,
+                                  size: 16,
+                                ),
+                                label: const Text('Bildirimlerim'),
+                                onPressed: () {
+                                  showModalBottomSheet(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    builder: (_) =>
+                                        const ExcuseManagementSheet(),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                  ],
+                ],
+
+                // 3. Large Featured Card: "BUGÜNKÜ VARDİYAN"
                 if (todayShift != null)
                   ShiftCard(shift: todayShift, isFeatured: true, onTap: () {})
                 else
@@ -146,7 +478,9 @@ class DashboardScreen extends StatelessWidget {
                           'Harika bir gün dileriz! Dinlenmenin tadını çıkarın.',
                           style: TextStyle(
                             fontSize: 13,
-                            color: Theme.of(context).colorScheme.onSurface
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
                                 .withValues(alpha: 0.6),
                           ),
                         ),
@@ -156,7 +490,7 @@ class DashboardScreen extends StatelessWidget {
 
                 const SizedBox(height: 18),
 
-                // 3. Next Shift Row
+                // 4. Next Shift Row
                 if (nextShift != null) ...[
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -198,7 +532,9 @@ class DashboardScreen extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w800,
-                                  color: Theme.of(context).colorScheme.onSurface
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
                                       .withValues(alpha: 0.5),
                                   letterSpacing: 0.5,
                                 ),
@@ -227,7 +563,7 @@ class DashboardScreen extends StatelessWidget {
                   const SizedBox(height: 20),
                 ],
 
-                // 4. Quick Action Chips: Vardiya | Otomatik Döngü | Takvim | Takas
+                // 5. Quick Action Chips: Vardiya | Döngü | Takvim | Mazeretler
                 Row(
                   children: [
                     Expanded(
@@ -271,10 +607,26 @@ class DashboardScreen extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: _buildActionTile(
-                        icon: Icons.swap_horiz_rounded,
-                        label: 'Takas',
+                        icon: Icons.event_note_rounded,
+                        label: 'Mazeret',
                         color: AppColors.accent,
-                        onTap: () => onNavigateTab?.call(3),
+                        onTap: () {
+                          if (isManager) {
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              builder: (_) => const ExcuseManagementSheet(),
+                            );
+                          } else {
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              builder: (_) => SubmitExcuseSheet(
+                                period: activePeriod,
+                              ),
+                            );
+                          }
+                        },
                       ),
                     ),
                   ],
@@ -282,7 +634,7 @@ class DashboardScreen extends StatelessWidget {
 
                 const SizedBox(height: 24),
 
-                // 5. This Week Summary: "BU HAFTA"
+                // 6. This Week Summary: "BU HAFTA"
                 Container(
                   padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
@@ -316,7 +668,6 @@ class DashboardScreen extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      // 7 Day Dots Row (Pzt Sal Çar Per Cum Cmt Paz)
                       _buildWeekDaysRow(weekShifts),
                     ],
                   ),
@@ -324,7 +675,7 @@ class DashboardScreen extends StatelessWidget {
 
                 const SizedBox(height: 18),
 
-                // 6. Team Widget Card: "EKİBİN — 3 kişi bugün çalışıyor"
+                // 7. Team Widget Card
                 Container(
                   padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
@@ -368,10 +719,14 @@ class DashboardScreen extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              'Bugün ekipte 3 kişi nöbette',
+                              isManager
+                                  ? 'Nöbetleri planlama ve yönetme yetkisine sahipsiniz'
+                                  : 'Bugün ekipte nöbetler güncel',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Theme.of(context).colorScheme.onSurface
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurface
                                     .withValues(alpha: 0.6),
                               ),
                             ),
@@ -450,7 +805,6 @@ class DashboardScreen extends StatelessWidget {
             dayDate.month == now.month &&
             dayDate.year == now.year;
 
-        // Check if there is a shift on this day
         ShiftModel? shiftOnDay;
         try {
           shiftOnDay = weekShifts.firstWhere((s) {

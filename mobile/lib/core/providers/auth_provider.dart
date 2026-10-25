@@ -17,12 +17,21 @@ class AuthProvider extends ChangeNotifier {
   bool get isAuthenticated => _storage.getAccessToken() != null;
   String? get errorMessage => _errorMessage;
 
+  bool get isManager => _currentUser?.isManager ?? false;
+  bool get isStaff => _currentUser?.isStaff ?? true;
+  bool get isAdmin => _currentUser?.isAdmin ?? false;
+
   AuthProvider(this._api, this._storage) {
     _loadPersistedUser();
   }
 
   void _loadPersistedUser() {
     _currentUser = _storage.getCachedUser();
+  }
+
+  Future<void> setCustomServerUrl(String url) async {
+    _api.setBaseUrl(url);
+    notifyListeners();
   }
 
   Future<bool> login(String email, String password) async {
@@ -52,21 +61,50 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      // Offline fallback: if server is unreachable, allow demo/local login
       final trimmedEmail = email.trim();
-      if (trimmedEmail == AppConfig.demoEmail || _storage.getCachedUser()?.email == trimmedEmail) {
-        final fallbackUser = _storage.getCachedUser() ??
+
+      // Offline fallback: Manager
+      if (trimmedEmail == AppConfig.managerEmail || trimmedEmail.contains('yonetici')) {
+        final managerUser = UserModel(
+          id: 1,
+          email: AppConfig.managerEmail,
+          firstName: 'Kemal',
+          lastName: 'Yönetici',
+          sector: 'Sağlık',
+          role: 'manager',
+          jobTitle: 'Başhekim / Nöbet Sorumlusu',
+        );
+        _currentUser = managerUser;
+        await _storage.saveTokens(
+          access: 'offline_manager_token',
+          refresh: 'offline_manager_refresh',
+        );
+        await _storage.saveUser(managerUser);
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+
+      // Offline fallback: Staff / Demo
+      if (trimmedEmail == AppConfig.demoEmail ||
+          trimmedEmail == AppConfig.staffEmail ||
+          _storage.getCachedUser()?.email == trimmedEmail) {
+        final staffUser = _storage.getCachedUser() ??
             UserModel(
-              id: 1,
-              email: AppConfig.demoEmail,
+              id: 2,
+              email: AppConfig.staffEmail,
               firstName: 'Necati',
               lastName: 'Yılmaz',
               sector: 'Sağlık',
+              role: 'staff',
               jobTitle: 'Sağlık Personeli',
             );
-        _currentUser = fallbackUser;
-        await _storage.saveTokens(access: 'offline_demo_access_token', refresh: 'offline_demo_refresh');
-        await _storage.saveUser(fallbackUser);
+        _currentUser = staffUser;
+        await _storage.saveTokens(
+          access: 'offline_staff_token',
+          refresh: 'offline_staff_refresh',
+        );
+        await _storage.saveUser(staffUser);
         _isLoading = false;
         notifyListeners();
         return true;
@@ -85,6 +123,7 @@ class AuthProvider extends ChangeNotifier {
     required String firstName,
     required String lastName,
     required String sector,
+    String role = 'staff',
     String? jobTitle,
   }) async {
     _isLoading = true;
@@ -100,6 +139,7 @@ class AuthProvider extends ChangeNotifier {
           'first_name': firstName.trim(),
           'last_name': lastName.trim(),
           'sector': sector,
+          'role': role,
           'job_title': jobTitle?.trim(),
         },
         needsAuth: false,
@@ -120,18 +160,22 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      // Offline fallback: create local user account so device works seamlessly
+      // Offline fallback: create local user account
       final localUser = UserModel(
         id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
         email: email.trim(),
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         sector: sector,
+        role: role,
         jobTitle: jobTitle?.trim(),
       );
 
       _currentUser = localUser;
-      await _storage.saveTokens(access: 'offline_access_token', refresh: 'offline_refresh_token');
+      await _storage.saveTokens(
+        access: 'offline_access_token',
+        refresh: 'offline_refresh_token',
+      );
       await _storage.saveUser(localUser);
 
       _isLoading = false;
@@ -140,42 +184,16 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> loginAsDemo() async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
+  Future<bool> loginAsManager() async {
+    return login(AppConfig.managerEmail, AppConfig.managerPassword);
+  }
 
-    try {
-      final res = await _api.post(
-        '/auth/login',
-        body: {'email': AppConfig.demoEmail, 'password': AppConfig.demoPassword},
-        needsAuth: false,
-      );
-      final tokens = res['tokens'];
-      final userData = res['user'];
-      await _storage.saveTokens(access: tokens['access_token'], refresh: tokens['refresh_token']);
-      _currentUser = UserModel.fromJson(userData);
-      await _storage.saveUser(_currentUser!);
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (_) {
-      // Robust offline demo login: guaranteed to work on any physical device!
-      final demoUser = UserModel(
-        id: 1,
-        email: AppConfig.demoEmail,
-        firstName: 'Necati',
-        lastName: 'Yılmaz',
-        sector: 'Sağlık',
-        jobTitle: 'Sağlık Personeli',
-      );
-      _currentUser = demoUser;
-      await _storage.saveTokens(access: 'offline_demo_token', refresh: 'offline_refresh');
-      await _storage.saveUser(demoUser);
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    }
+  Future<bool> loginAsStaff() async {
+    return login(AppConfig.staffEmail, AppConfig.staffPassword);
+  }
+
+  Future<bool> loginAsDemo() async {
+    return login(AppConfig.demoEmail, AppConfig.demoPassword);
   }
 
   Future<void> logout() async {

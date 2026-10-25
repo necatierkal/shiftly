@@ -11,6 +11,11 @@ from app.models.models import (
     Team,
     TeamMember,
     Subscription,
+    DutyPeriod,
+    DutyExcuse,
+    DutyPlan,
+    DutyPlanShift,
+    PlanAuditLog,
 )
 from app.services.shift_service import ShiftService
 
@@ -33,7 +38,8 @@ def init_db(db: Session = None):
                 first_name="Necati",
                 last_name="Yılmaz",
                 sector="Sağlık",
-                job_title="Hemşire / Sağlık Personeli",
+                job_title="Başhemşire / Sorumlu Yönetici",
+                role="manager",
                 timezone="Europe/Istanbul",
                 locale="tr",
                 is_active=True,
